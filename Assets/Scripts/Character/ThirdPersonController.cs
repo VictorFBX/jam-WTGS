@@ -88,9 +88,13 @@ namespace StarterAssets
 		private StarterAssetsInputs _input;
 		private GameObject _mainCamera;
 
+		private GameObject _current_collision;
+
 		private const float _threshold = 0.01f;
 
 		private bool _hasAnimator;
+
+		private bool _can_interact = false;
 
 		private bool IsCurrentDeviceMouse => _playerInput.currentControlScheme == "KeyboardMouse";
 
@@ -101,6 +105,8 @@ namespace StarterAssets
 			{
 				_mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
 			}
+
+			GameEvents.PuzzleStart += emit_puzzle_start;
 		}
 
 		private void Start()
@@ -117,6 +123,11 @@ namespace StarterAssets
 			_fallTimeoutDelta = FallTimeout;
 		}
 
+		private void OnTriggerExit(Collider collision) {
+			if (collision.gameObject.tag == "Interactive")
+				_current_collision = collision.gameObject;
+		}
+
 		private void Update()
 		{
 			_hasAnimator = TryGetComponent(out _animator);
@@ -124,6 +135,12 @@ namespace StarterAssets
 			JumpAndGravity();
 			GroundedCheck();
 			Move();
+		}
+
+		private void LateUpdate() {
+			if (_can_interact)
+				if (_playerInput.actions["Interact"].isPressed())
+					emit_puzzle_start(_current_collision);
 		}
 
 		private void AssignAnimationIDs()
@@ -295,5 +312,10 @@ namespace StarterAssets
 			// when selected, draw a gizmo in the position of, and matching radius of, the grounded collider
 			Gizmos.DrawSphere(new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z), GroundedRadius);
 		}
+	
+		private void emit_puzzle_start(object args) {
+			PuzzleStart(args);
+		}
+		
 	}
 }
