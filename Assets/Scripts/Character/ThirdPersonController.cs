@@ -2,6 +2,7 @@ using UnityEngine;
 #if ENABLE_INPUT_SYSTEM && STARTER_ASSETS_PACKAGES_CHECKED
 using UnityEngine.InputSystem;
 #endif
+using System;
 
 /* Note: animations are called via the controller for both the character and capsule using animator null checks
  */
@@ -14,6 +15,8 @@ namespace StarterAssets
 #endif
 	public class ThirdPersonController : MonoBehaviour
 	{
+		[SerializeField] RuntimeData data;
+
 		[Header("Player")]
 		[Tooltip("Move speed of the character in m/s")]
 		public float MoveSpeed = 2.0f;
@@ -87,7 +90,6 @@ namespace StarterAssets
 		private CharacterController _controller;
 		private StarterAssetsInputs _input;
 		private GameObject _mainCamera;
-
 		private GameObject _current_collision;
 
 		private const float _threshold = 0.01f;
@@ -95,6 +97,8 @@ namespace StarterAssets
 		private bool _hasAnimator;
 
 		private bool _can_interact = false;
+
+		private bool walking_state;
 
 		private bool IsCurrentDeviceMouse => _playerInput.currentControlScheme == "KeyboardMouse";
 
@@ -106,7 +110,11 @@ namespace StarterAssets
 				_mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
 			}
 
-			GameEvents.PuzzleStart += emit_puzzle_start;
+			GameEvents.PuzzleStart += on_puzzle_start;
+		}
+
+		private void OnDisable() {
+			GameEvents.PuzzleStart -= on_puzzle_start;
 		}
 
 		private void Start()
@@ -121,26 +129,37 @@ namespace StarterAssets
 			// reset our timeouts on start
 			_jumpTimeoutDelta = JumpTimeout;
 			_fallTimeoutDelta = FallTimeout;
+
+			data.current_gameplay_state = GameplayStates.FreeWalk;
+			Cursor.lockState = CursorLockMode.Locked;
 		}
 
-		private void OnTriggerExit(Collider collision) {
+		private void OnTriggerEnter(Collider collision) {
 			if (collision.gameObject.tag == "Interactive")
+				_can_interact = true;
 				_current_collision = collision.gameObject;
+		}
+
+		void OnTriggerExit(Collider other)
+		{
+			_can_interact = false;
 		}
 
 		private void Update()
 		{
-			_hasAnimator = TryGetComponent(out _animator);
-			
-			JumpAndGravity();
-			GroundedCheck();
-			Move();
+			if (data.current_gameplay_state == GameplayStates.FreeWalk) {
+				Cursor.lockState = CursorLockMode.Locked;
+				_hasAnimator = TryGetComponent(out _animator);
+				JumpAndGravity();
+				GroundedCheck();
+				Move();
+			}
 		}
 
-		private void LateUpdate() {
-			if (_can_interact)
-				if (_playerInput.actions["Interact"].isPressed())
-					emit_puzzle_start(_current_collision);
+		private void FixedUpdate() {
+			if (data.current_gameplay_state == GameplayStates.FreeWalk) {
+				Interact(_can_interact);
+			}
 		}
 
 		private void AssignAnimationIDs()
@@ -198,7 +217,7 @@ namespace StarterAssets
 			}
 			_animationBlend = Mathf.Lerp(_animationBlend, targetSpeed, Time.deltaTime * SpeedChangeRate);
 
-			// normalise input direction
+			// normalize input direction
 			Vector3 inputDirection = new Vector3(_input.move.x, 0.0f, _input.move.y).normalized;
 
 			// note: Vector2's != operator uses approximation so is not floating point error prone, and is cheaper than magnitude
@@ -294,6 +313,13 @@ namespace StarterAssets
 			}
 		}
 
+		private void Interact(bool permission) {
+			if (permission)
+				if (_playerInput.actions["Interact"].IsPressed()) {
+					GameEvents.on_puzzle_Start(_current_collision);
+				}
+		}
+
 		private static float ClampAngle(float lfAngle, float lfMin, float lfMax)
 		{
 			if (lfAngle < -360f) lfAngle += 360f;
@@ -312,10 +338,10 @@ namespace StarterAssets
 			// when selected, draw a gizmo in the position of, and matching radius of, the grounded collider
 			Gizmos.DrawSphere(new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z), GroundedRadius);
 		}
-	
-		private void emit_puzzle_start(object args) {
-			PuzzleStart(args);
+
+		void on_puzzle_start(object args) {
+			_can_interact = false;
 		}
-		
+
 	}
 }
